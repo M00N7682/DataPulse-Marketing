@@ -1,0 +1,6 @@
+Model,True_Positives,False_Positives,False_Negatives,Revenue_from_TP,Cost_from_FP,Missed_Revenue,Net_Profit,Cost_per_TP
+Logistic Regression,1693,0,0,1693000,0,0,1693000,0.0
+Random Forest,1693,0,0,1693000,0,0,1693000,0.0
+SVM,1693,12,0,1693000,1200,0,1691800,0.7088009450637401
+XGBoost,1693,0,0,1693000,0,0,1693000,0.0
+LightGBM,1693,0,0,1693000,0,0,1693000,0.0

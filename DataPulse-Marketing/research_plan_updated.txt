@@ -1,0 +1,261 @@
+# 디지털 마케팅 캠페인 데이터 기반 ROAS 예측 연구 계획
+
+## 1. 연구 목적
+
+- 실제 디지털 마케팅 캠페인 데이터를 기반으로 고객 전환율 예측 모델 구축
+- CTGAN 및 Tabular Diffusion을 이용한 합성 마케팅 데이터 생성
+- 합성데이터를 결합한 Hybrid 학습으로 예측 성능, 일반화 성능, 효율성 검증
+- 개인정보보호 규제 환경에서의 마케팅 의사결정 자동화 가능성 평가
+
+## 2. 데이터셋 특성 분석
+
+### 현재 데이터셋 구조 (8,002 레코드 × 20 변수)
+
+**타겟 변수:**
+- `Conversion` (0/1): 고객 전환 여부 (이진 분류)
+
+**주요 마케팅 성과 지표:**
+- `AdSpend`: 광고비
+- `ClickThroughRate`: 클릭률
+- `ConversionRate`: 전환율
+- `WebsiteVisits`: 웹사이트 방문 수
+- `PagesPerVisit`: 방문당 페이지 수
+- `TimeOnSite`: 사이트 체류 시간
+
+**고객 특성:**
+- `Age`, `Gender`, `Income`: 인구통계학적 정보
+- `PreviousPurchases`: 이전 구매 이력
+- `LoyaltyPoints`: 로열티 포인트
+
+**캠페인 정보:**
+- `CampaignChannel`: Social Media, Email, PPC, SEO, Referral
+- `CampaignType`: Awareness, Conversion, Retention, Consideration
+- `AdvertisingPlatform`, `AdvertisingTool`: 광고 플랫폼 정보
+
+**행동 데이터:**
+- `SocialShares`, `EmailOpens`, `EmailClicks`: 참여도 지표
+
+### ROAS 계산 방식 정의
+```
+ROAS = (전환가치) / (광고비)
+전환가치 = Income × ConversionRate × (채널별 가중치)
+또는
+전환가치 = Conversion × 평균구매가격 (추정)
+```
+
+## 3. 데이터 분석 계획
+
+### (1) 탐색적 데이터 분석(EDA)
+**목표:** 데이터 구조, 변수 간 관계, 이상치·결측치를 파악하여 모델링 방향 결정
+
+**수행 내용:**
+- 변수 타입별 기본 통계량 분석 (df.describe())
+- 결측률·이상값 확인 (isna().sum(), IQR 기준 이상치 제거)
+- 채널별 광고비-전환율-고객특성 상관관계 시각화
+- 캠페인 유형별 성과 분석 (Awareness vs Conversion vs Retention vs Consideration)
+- 고객 세그먼트별(연령, 소득, 성별) 전환율 차이 분석
+
+**도식 제안:**
+- Figure 1. "변수별 분포 히스토그램 (연속형/범주형)"
+- Figure 2. "채널-캠페인타입별 전환율 히트맵"
+- Figure 3. "광고비 vs 전환율 산점도 (채널별 색상 구분)"
+- Figure 4. "고객 인구통계학적 특성별 전환율 박스플롯"
+
+### (2) 데이터 전처리 및 피처 엔지니어링
+**핵심 파생 변수 생성:**
+```python
+# ROAS 관련 파생 변수
+roas_estimated = (Income * ConversionRate) / AdSpend
+cost_per_conversion = AdSpend / (ConversionRate + 1e-8)
+efficiency_score = ClickThroughRate * ConversionRate
+
+# 고객 가치 지표
+customer_lifetime_value = Income * (LoyaltyPoints / 1000) * PreviousPurchases
+engagement_score = (SocialShares + EmailOpens + EmailClicks) / 3
+website_engagement = PagesPerVisit * TimeOnSite
+
+# 채널 효율성
+channel_spend_ratio = AdSpend / Income
+conversion_efficiency = Conversion / WebsiteVisits
+
+# 범주형 변수 인코딩
+channel_encoded = pd.get_dummies(CampaignChannel)
+campaign_type_encoded = pd.get_dummies(CampaignType)
+```
+
+**전처리 단계:**
+1. 로그 변환 (AdSpend, Income 등 치우친 분포)
+2. 표준화/정규화 (Z-score, Min-Max)
+3. 범주형 변수 인코딩 (One-hot, Label encoding)
+4. 이상치 처리 (IQR 방법)
+
+**데이터 분할:**
+- 학습/검증/테스트: 70:15:15 (랜덤 분할)
+- 채널별 홀드아웃 셋 구성 (콜드스타트 시나리오용)
+
+**도식 제안:**
+- Figure 5. "데이터 전처리 파이프라인 (원천 → 파생변수 → 인코딩 → 분할)"
+
+## 4. 합성데이터 생성 계획
+
+### (1) 생성 모델 선택
+**CTGAN (Conditional Tabular GAN):**
+- 범주형/연속형 혼합 데이터에 강점
+- 조건부 생성으로 채널별 특성 유지
+
+**Tabular Diffusion (TabDDPM):**
+- 노이즈 제거 기반으로 안정적 분포 복원
+- 더 나은 상관관계 보존
+
+### (2) 실험 절차
+1. **피처 선택:** 핵심 마케팅 변수 선별
+   - AdSpend, ClickThroughRate, ConversionRate, Income
+   - CampaignChannel, CampaignType, Age, Gender
+   - WebsiteVisits, TimeOnSite, PreviousPurchases
+
+2. **모델 학습:**
+   - CTGAN: 500 epochs, batch_size=500
+   - TabDDPM: 1000 steps, lr=1e-4
+
+3. **합성 데이터 생성:**
+   - 생성량: 실제 데이터의 100% (8,000개)
+   - 채널별 조건부 생성으로 균형 유지
+
+### (3) 품질 평가 지표
+**통계적 유사성:**
+- Kolmogorov-Smirnov Distance (단변량 분포)
+- Wasserstein Distance (다변량 분포)
+- Jensen-Shannon Divergence
+
+**구조적 유사성:**
+- Correlation Preservation Ratio
+- Mutual Information Score
+- Principal Component Analysis 비교
+
+**도식 제안:**
+- Figure 6. "합성 데이터 생성 파이프라인"
+- Figure 7. "실제 vs 합성 데이터 분포 비교 (KDE plot)"
+- Figure 8. "상관관계 매트릭스 비교 (Real vs Synthetic)"
+
+## 5. 예측모델 학습 및 실험 설계
+
+### (1) 모델 구성
+**Baseline Models:**
+- Logistic Regression
+- Random Forest
+- Support Vector Machine
+
+**Advanced Models:**
+- XGBoost
+- LightGBM
+- CatBoost
+
+**Deep Learning:**
+- TabNet
+- Neural Network (MLP)
+
+### (2) 학습 시나리오
+| 시나리오 | 데이터 구성 | 목적 |
+|---------|------------|------|
+| A | 실제 데이터만 (8,002개) | 기준 성능 측정 |
+| B | 합성 데이터만 (8,000개) | 대체 가능성 검증 |
+| C | 실제+합성 (α=0.5, 16,002개) | 혼합 학습 효과 |
+| D | 실제+합성 (α=0.3, 10,403개) | 최적 비율 탐색 |
+| E | 콜드스타트 (신규 채널) | 일반화 성능 평가 |
+
+### (3) 검증 전략
+- **5-Fold Cross Validation:** 모델 안정성 평가
+- **Stratified Split:** 채널별 균형 유지
+- **홀드아웃 테스트:** 신규 캠페인 시뮬레이션
+
+**도식 제안:**
+- Figure 9. "모델 학습 아키텍처"
+- Figure 10. "시나리오별 성능 비교 막대그래프"
+
+## 6. 성능 및 효율성 평가 계획
+
+### (1) 분류 성능 지표
+**주요 지표:**
+- **Accuracy:** 전체 정확도
+- **Precision/Recall:** 전환 예측 정밀도/재현율
+- **F1-Score:** 균형 성능 지표
+- **AUC-ROC:** 분류 성능 종합 평가
+
+**비즈니스 지표:**
+- **Cost per True Positive:** 실제 전환 고객 획득 비용
+- **Marketing Efficiency:** 마케팅 효율성 개선도
+
+### (2) 합성데이터 품질 지표
+- **Fidelity:** 통계적 유사성 (KS Test < 0.1)
+- **Utility:** 예측 성능 유지율 (> 95%)
+- **Privacy:** 개인정보 유출 위험도
+
+### (3) 효율성 지표
+```python
+# 콜드스타트 성능 향상률
+coldstart_improvement = (F1_hybrid - F1_real) / F1_real * 100
+
+# 데이터 증강 효과
+data_augmentation_effect = (Performance_augmented - Performance_baseline) / Performance_baseline
+
+# 비용 효율성
+cost_efficiency = F1_improvement / (training_time_increase + data_generation_cost)
+```
+
+**도식 제안:**
+- Figure 11. "성능 지표 비교 (Precision/Recall/F1)"
+- Figure 12. "콜드스타트 시나리오 성능 향상"
+- Figure 13. "채널별 예측 정확도 히트맵"
+- Figure 14. "ROC Curve 비교 (시나리오별)"
+
+## 7. 기대되는 연구 산출물
+
+### (1) 데이터 분석 결과
+- **고객 세그먼트별 전환 패턴 분석 리포트**
+- **채널별 마케팅 효율성 벤치마크**
+- **실제·합성·혼합 데이터 품질 비교표**
+
+### (2) 모델링 결과
+- **모델별 성능 지표 종합 테이블**
+- **최적 하이퍼파라미터 및 피처 중요도**
+- **콜드스타트 시나리오 성능 평가**
+
+### (3) 비즈니스 인사이트
+- **채널별 예산 배분 최적화 가이드라인**
+- **신규 캠페인 성과 예측 프레임워크**
+- **개인정보보호 규제 대응 전략**
+
+### (4) 기술적 기여
+- **마케팅 도메인 특화 합성데이터 생성 파이프라인**
+- **Hybrid 학습 기반 전환율 예측 모델**
+- **실시간 ROAS 예측 대시보드 프로토타입**
+
+## 8. 구현 순서 및 일정
+
+### Phase 1: 데이터 이해 (1주)
+- EDA 및 데이터 품질 분석
+- 피처 엔지니어링 설계
+
+### Phase 2: 합성데이터 생성 (2주)
+- CTGAN/TabDDPM 모델 학습
+- 품질 평가 및 최적화
+
+### Phase 3: 예측 모델링 (2주)
+- 다양한 ML 모델 비교
+- 하이퍼파라미터 튜닝
+
+### Phase 4: 실험 및 평가 (1주)
+- 시나리오별 성능 측정
+- 통계적 유의성 검증
+
+### Phase 5: 결과 정리 (1주)
+- 시각화 및 보고서 작성
+- 연구 결과 발표 준비
+
+---
+
+**핵심 차별점:**
+1. **타겟 변수:** 연속형 ROAS → 이진 분류 Conversion
+2. **데이터 구조:** 시계열 → 고객별 횡단면 데이터
+3. **평가 지표:** RMSE/MAPE → Precision/Recall/F1
+4. **비즈니스 목표:** 광고비 최적화 → 전환율 예측 정확도
